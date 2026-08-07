@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<title>TotoTools — Catálogo</title>
+<title>Paradise Shop — Catálogo</title>
 <style>
   :root{
     --verde:#0F4C3A;
@@ -52,6 +52,10 @@
     background:var(--papaya);
     display:flex; align-items:center; justify-content:center;
     font-size:22px; flex-shrink:0;
+    overflow:hidden;
+  }
+  .brand-mark img{
+    width:100%; height:100%; object-fit:cover; display:block;
   }
   .brand-name{ font-size:1.5rem; letter-spacing:.2px; }
   .brand-tag{ font-size:.82rem; opacity:.78; margin-top:2px; }
@@ -288,7 +292,7 @@
 
 <header class="top">
   <div class="brand-row">
-    <div class="brand-mark">🛍️</div>
+    <div class="brand-mark" id="brandMark">🛍️</div>
     <div>
       <div class="brand-name" id="shopName">Paradise Shop</div>
       <div class="brand-tag">Elige, arma tu pedido y lo enviamos por WhatsApp</div>
@@ -359,14 +363,17 @@ const CONFIG = {
   horaCierre: "",      // "HH:MM"
   descuentoEfectivo: 0, // % de descuento si el cliente paga en efectivo (0 = sin descuento, no se muestra la opción)
 
-  // Deja esto vacío ("") si vas a usar un productos.json local (modo manual).
-  // Si activaste la sincronización automática en tu app del catálogo, pon aquí
-  // la misma URL de Firebase Realtime Database que pusiste allá (Config →
-  // Sitio web → "URL de Firebase Realtime Database") — el sitio leerá
-  // siempre la última versión.
-  firebaseDbUrl: "https://catalogo-7f269-default-rtdb.europe-west1.firebasedatabase.app",
+  // Deja esto vacío ("") en owner/repo si vas a usar un productos.json local
+  // (modo manual). Si activaste la sincronización automática en tu app del
+  // catálogo, pon aquí los mismos datos de GitHub que pusiste allá (Config →
+  // Sitio web → Usuario, Repositorio, Rama, Ruta del archivo) — el sitio leerá
+  // siempre la última versión directo desde GitHub, sin pasar por Netlify.
+  githubOwner: "",
+  githubRepo: "",
+  githubBranch: "main",
+  githubPath: "catalogo.json",
 
-  productsFile: "./productos.json" // se usa solo si firebaseDbUrl está vacío
+  productsFile: "./productos.json" // se usa solo si githubOwner/githubRepo están vacíos
 };
 
 /* Productos de muestra — se usan solo si productos.json no carga
@@ -387,18 +394,31 @@ let metodoPago = "transferencia"; // "transferencia" (precio normal) | "efectivo
 
 document.getElementById("shopName").textContent = CONFIG.shopName;
 
+// Muestra el logo que se sincronizó desde la app del catálogo (si lo hay) en
+// el círculo de la esquina superior izquierda; si no hay logo configurado,
+// se deja el icono 🛍️ de siempre.
+function aplicarLogo(logoUrl){
+  const mark = document.getElementById("brandMark");
+  if(!mark) return;
+  if(logoUrl){
+    mark.innerHTML = `<img src="${logoUrl}" alt="Logo">`;
+  }else{
+    mark.textContent = "🛍️";
+  }
+}
+
 async function loadProducts(){
-  const url = CONFIG.firebaseDbUrl
-    ? `${CONFIG.firebaseDbUrl}/catalogo.json`
+  const url = (CONFIG.githubOwner && CONFIG.githubRepo)
+    ? `https://raw.githubusercontent.com/${CONFIG.githubOwner}/${CONFIG.githubRepo}/${CONFIG.githubBranch || "main"}/${CONFIG.githubPath || "catalogo.json"}?_=${Date.now()}`
     : CONFIG.productsFile;
   try{
     const res = await fetch(url, { cache:"no-store" });
     if(!res.ok) throw new Error("no se pudo leer el catálogo");
     const data = await res.json();
-    // Firebase Realtime Database devuelve el objeto directo (o null si está
-    // vacío). jsonbin envolvía todo en {record: {...}}; ya no aplica.
+    // El archivo publicado desde GitHub (o un productos.json local) llega tal
+    // cual se guardó, sin envoltorio extra.
     const raw = data;
-    if(!raw) throw new Error("catálogo vacío en Firebase");
+    if(!raw) throw new Error("catálogo vacío");
 
     if(Array.isArray(raw)){
       // productos.json local en modo manual: es un array plano de productos
@@ -420,6 +440,7 @@ async function loadProducts(){
         if(tagEl && raw.tienda.tagline) tagEl.textContent = raw.tienda.tagline;
         if(raw.tienda.colorPrimario) document.documentElement.style.setProperty("--verde", raw.tienda.colorPrimario);
         if(raw.tienda.colorAcento) document.documentElement.style.setProperty("--papaya", raw.tienda.colorAcento);
+        aplicarLogo(raw.tienda.logo);
       }
     }
     if(!PRODUCTS.length) throw new Error("catálogo vacío");
@@ -430,9 +451,9 @@ async function loadProducts(){
   render();
   actualizarHorario();
   renderNovedades();
-  // Si viene de Firebase (sincronización automática), refresca solo cada 2
+  // Si viene de GitHub (sincronización automática), refresca solo cada 2
   // minutos para que el sitio quede al día sin que el visitante tenga que recargar.
-  if(CONFIG.firebaseDbUrl) setTimeout(loadProducts, 120000);
+  if(CONFIG.githubOwner && CONFIG.githubRepo) setTimeout(loadProducts, 120000);
 }
 
 /* ---------- Horario de atención ---------- */
